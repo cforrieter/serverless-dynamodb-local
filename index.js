@@ -234,7 +234,6 @@ class ServerlessDynamodbLocal {
         if (!source.table) {
           throw new Error('seeding source "table" property not defined');
         }
-        this.serverlessLog("Sources: " + source.sources);
         const seedPromise = seeder
           .locateSeeds(source.sources || [])
           .then(seeds =>
@@ -245,7 +244,6 @@ class ServerlessDynamodbLocal {
             )
           );
 
-        this.serverlessLog("Source path: " + source.sourcePath);
         const seedFolderPromise = seeder
           .locateSeedsFiles(source.sourcePath)
           .then(seeds =>
