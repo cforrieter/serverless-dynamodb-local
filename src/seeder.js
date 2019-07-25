@@ -4,6 +4,7 @@ const BbPromise = require("bluebird");
 const _ = require("lodash");
 const path = require("path");
 const fs = require("fs");
+const glob = require("glob");
 
 // DynamoDB has a 25 item limit in batch requests
 // https://docs.aws.amazon.com/amazondynamodb/latest/APIReference/API_BatchWriteItem.html
@@ -15,36 +16,43 @@ const MIGRATION_SEED_CONCURRENCY = 5;
 /**
  * Writes a batch chunk of migration seeds to DynamoDB. DynamoDB has a limit on the number of
  * items that may be written in a batch operation.
- * @param {function} dynamodbWriteFunction The DynamoDB DocumentClient.batchWrite or DynamoDB.batchWriteItem function 
+ * @param {function} dynamodbWriteFunction The DynamoDB DocumentClient.batchWrite or DynamoDB.batchWriteItem function
  * @param {string} tableName The table name being written to
  * @param {any[]} seeds The migration seeds being written to the table
  */
 function writeSeedBatch(dynamodbWriteFunction, tableName, seeds) {
   const params = {
     RequestItems: {
-      [tableName]: seeds.map((seed) => ({
+      [tableName]: seeds.map(seed => ({
         PutRequest: {
-          Item: seed,
-        },
-      })),
-    },
+          Item: seed
+        }
+      }))
+    }
   };
   return new BbPromise((resolve, reject) => {
     // interval lets us know how much time we have burnt so far. This lets us have a backoff mechanism to try
     // again a few times in case the Database resources are in the middle of provisioning.
     let interval = 0;
     function execute(interval) {
-      setTimeout(() => dynamodbWriteFunction(params, (err) => {
-        if (err) {
-          if (err.code === "ResourceNotFoundException" && interval <= 5000) {
-            execute(interval + 1000);
-          } else {
-            reject(err);
-          }
-        } else {
-          resolve();
-        }
-      }), interval);
+      setTimeout(
+        () =>
+          dynamodbWriteFunction(params, err => {
+            if (err) {
+              if (
+                err.code === "ResourceNotFoundException" &&
+                interval <= 5000
+              ) {
+                execute(interval + 1000);
+              } else {
+                reject(err);
+              }
+            } else {
+              resolve();
+            }
+          }),
+        interval
+      );
     }
     execute(interval);
   });
@@ -71,10 +79,9 @@ function writeSeeds(dynamodbWriteFunction, tableName, seeds) {
     const seedChunks = _.chunk(seeds, MAX_MIGRATION_CHUNK);
     return BbPromise.map(
       seedChunks,
-      (chunk) => writeSeedBatch(dynamodbWriteFunction, tableName, chunk),
+      chunk => writeSeedBatch(dynamodbWriteFunction, tableName, chunk),
       { concurrency: MIGRATION_SEED_CONCURRENCY }
-    )
-      .then(() => console.log("Seed running complete for table: " + tableName));
+    ).then(() => console.log("Seed running complete for table: " + tableName));
   }
 }
 
@@ -83,8 +90,8 @@ function writeSeeds(dynamodbWriteFunction, tableName, seeds) {
  * @param {string} fileName The path to the file
  */
 function fileExists(fileName) {
-  return new BbPromise((resolve) => {
-    fs.exists(fileName, (exists) => resolve(exists));
+  return new BbPromise(resolve => {
+    fs.exists(fileName, exists => resolve(exists));
   });
 }
 
@@ -97,8 +104,8 @@ function fileExists(fileName) {
 function unmarshalBuffer(json) {
   _.forEach(json, function(value, key) {
     // Null check to prevent creation of Buffer when value is null
-    if (value !== null && value.type==="Buffer") {
-      json[key]= new Buffer(value.data);
+    if (value !== null && value.type === "Buffer") {
+      json[key] = new Buffer(value.data);
     }
   });
   return json;
@@ -119,7 +126,7 @@ function getSeedsAtLocation(location) {
   if (Array.isArray(result)) {
     return _.forEach(result, unmarshalBuffer);
   } else {
-    return [ unmarshalBuffer(result) ];
+    return [unmarshalBuffer(result)];
   }
 }
 
@@ -131,16 +138,38 @@ function locateSeeds(sources, cwd) {
   sources = sources || [];
   cwd = cwd || process.cwd();
 
-  const locations = sources.map((source) => path.join(cwd, source));
-  return BbPromise.map(locations, (location) => {
-    return fileExists(location).then((exists) => {
-      if(!exists) {
+  const locations = sources.map(source => path.join(cwd, source));
+  return BbPromise.map(locations, location => {
+    return fileExists(location).then(exists => {
+      if (!exists) {
         throw new Error("source file " + location + " does not exist");
       }
       return getSeedsAtLocation(location);
     });
-  // Smash the arrays together
-  }).then((seedArrays) => [].concat.apply([], seedArrays));
+    // Smash the arrays together
+  }).then(seedArrays => [].concat.apply([], seedArrays));
 }
 
-module.exports = { writeSeeds, locateSeeds };
+/**
+ * Locates seeds given a folder structure
+ * @param {string[]} sources The filenames to scrape for seeds
+ */
+function locateSeedsFiles(sourcePath) {
+  glob(sourcePath, options, function(er, files) {
+    if (err) {
+      throw new Error("could not properly list files at that location, ", er);
+    }
+
+    return BbPromise.map(files, file => {
+      return fileExists(file).then(exists => {
+        if (!exists) {
+          throw new Error("source file " + file + " does not exist");
+        }
+        return getSeedsAtLocation(file);
+      });
+      // Smash the arrays together
+    }).then(seedArrays => [].concat.apply([], seedArrays));
+  });
+}
+
+module.exports = { writeSeeds, locateSeeds, locateSeedsFiles };
