@@ -244,6 +244,7 @@ class ServerlessDynamodbLocal {
             )
           );
 
+        this.serverlessLog("Source path: ", source.sourcePath);
         const seedFolderPromise = seeder
           .locateSeedsFiles(source.sourcePath)
           .then(seeds =>
