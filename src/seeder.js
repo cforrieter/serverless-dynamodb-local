@@ -160,6 +160,8 @@ function locateSeedsFiles(sourcePath) {
       throw new Error("could not properly list files at that location, ", er);
     }
 
+    console.log(files)
+
     return BbPromise.map(files, file => {
       return fileExists(file).then(exists => {
         if (!exists) {
