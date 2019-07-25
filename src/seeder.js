@@ -155,22 +155,25 @@ function locateSeeds(sources, cwd) {
  * @param {string[]} sources The filenames to scrape for seeds
  */
 function locateSeedsFiles(sourcePath) {
-  glob(sourcePath, {}, function(er, files) {
-    if (err) {
-      throw new Error("could not properly list files at that location, ", er);
-    }
+  return new Promise((res, rej) => {
+    glob(sourcePath, {}, function(er, files) {
+      if (er) {
+        rej(er);
+      }
 
-    console.log(files)
-
-    return BbPromise.map(files, file => {
-      return fileExists(file).then(exists => {
-        if (!exists) {
-          throw new Error("source file " + file + " does not exist");
-        }
-        return getSeedsAtLocation(file);
-      });
-      // Smash the arrays together
-    }).then(seedArrays => [].concat.apply([], seedArrays));
+      res(
+        BbPromise.map(files, file => {
+          const filePath = path.join(process.cwd(), file);
+          return fileExists(filePath).then(exists => {
+            if (!exists) {
+              throw new Error("source file " + file + " does not exist");
+            }
+            return getSeedsAtLocation(filePath);
+          });
+          // Smash the arrays together
+        }).then(seedArrays => [].concat.apply([], seedArrays))
+      );
+    });
   });
 }
 
