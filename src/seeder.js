@@ -155,7 +155,7 @@ function locateSeeds(sources, cwd) {
  * @param {string[]} sources The filenames to scrape for seeds
  */
 function locateSeedsFiles(sourcePath) {
-  glob(sourcePath, options, function(er, files) {
+  glob(sourcePath, {}, function(er, files) {
     if (err) {
       throw new Error("could not properly list files at that location, ", er);
     }
